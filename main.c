@@ -10,8 +10,16 @@
 #define WINDOW_H 675
 
 #define SHIP_ROT_SPEED 0.10f
-#define SHIP_THRUST 0.12f;
-#define OVERHEAT_MAX 300.0f;
+#define SHIP_THRUST 0.12f
+#define OVERHEAT_MAX 300.0f
+
+#define HEAT_GAIN_PER_THRUST 1.1f
+#define HEAT_DECAY_NORMAL 0.7f
+#define HEAT_DECAY_CRITICAL 0.35f
+#define OVERHEAT_CRITICAL_THRESHOLD 1.00f
+#define OVERHEAT_THRUST_PENALTY 0.30f
+#define OVERHEAT_DRAG_MULTIPLIER 0.94f
+
 
 typedef struct {
     float x, y, vx, vy, angle;
@@ -47,6 +55,9 @@ void thick_line(int x1, int y1, int x2, int y2, int thickness) {
     }
 }
 
+bool is_critical_overheat() {
+    return ship.heat >= OVERHEAT_MAX * OVERHEAT_CRITICAL_THRESHOLD;
+}
 
 void init_game() {
     srand(time(NULL));
@@ -68,13 +79,34 @@ void update() {
     if (left) ship.angle -= SHIP_ROT_SPEED;
     if (right) ship.angle += SHIP_ROT_SPEED;
 
+    float effective_thrust = SHIP_THRUST;
+    if (is_critical_overheat()) effective_thrust *= OVERHEAT_THRUST_PENALTY;
+
     if (thrust && ship.fuel > 5.0f) {
         ship.vx += cosf(ship.angle) * SHIP_THRUST;
         ship.vy += sinf(ship.angle) * SHIP_THRUST;
+        ship.heat += HEAT_GAIN_PER_THRUST;
     }
+
+    float decay = is_critical_overheat() ? HEAT_DECAY_CRITICAL : HEAT_DECAY_NORMAL;
+    ship.heat = fmaxf(0, ship.heat - decay);
 
     ship.x += ship.vx;
     ship.y += ship.vy;
+
+    if (is_critical_overheat()) {
+        ship.vx *= OVERHEAT_DRAG_MULTIPLIER;
+        ship.vy *= OVERHEAT_DRAG_MULTIPLIER;
+        // TODO: critical overheat effect
+
+        // TODO: Damage over time
+    } else {
+        ship.vx *= 0.985f;
+        ship.vy *- 0.985f;
+        ship.overheat_damage_accumulator = fmaxf(0, ship.overheat_damage_accumulator - 0.4f);
+    }
+
+
 }
 
 draw_ship() {
@@ -85,6 +117,16 @@ draw_ship() {
     Uint8 g = (Uint8)(255 - heat_glow * 160);
     Uint8 b = (Uint8)(120 + heat_glow * 40);
     Uint8 alpha = 220 + (Uint8)(35 * sinf(frame * 0.25f));
+
+    if (is_critical_overheat()) {
+        if ((frame / 5 ) % 2 == 0) {
+            r = 255; g = 50; b = 30;
+            alpha = 255;
+        } else {
+            r = 230; g = 90; b = 50;
+            alpha = 200;
+        }
+    } 
 
     SDL_SetRenderDrawColor(renderer, r, g, b, alpha);
 
