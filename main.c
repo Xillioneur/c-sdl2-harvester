@@ -58,7 +58,23 @@ void init_game() {
 }
 
 void update() {
+    const Uint8* keys = SDL_GetKeyboardState(NULL);
+    int left = keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT];
+    int right = keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT];
+    int thrust = keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP];
 
+    frame++;
+
+    if (left) ship.angle -= SHIP_ROT_SPEED;
+    if (right) ship.angle += SHIP_ROT_SPEED;
+
+    if (thrust && ship.fuel > 5.0f) {
+        ship.vx += cosf(ship.angle) * SHIP_THRUST;
+        ship.vy += sinf(ship.angle) * SHIP_THRUST;
+    }
+
+    ship.x += ship.vx;
+    ship.y += ship.vy;
 }
 
 draw_ship() {
@@ -115,6 +131,7 @@ int main(int argc, char* argv[]) {
             if (ev.type == SDL_QUIT) running = false;
         }
 
+        update();
         render();
 
         SDL_Delay(16);
