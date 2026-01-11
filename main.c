@@ -9,12 +9,90 @@
 #define WINDOW_W 1200
 #define WINDOW_H 675
 
+#define SHIP_ROT_SPEED 0.10f
+#define SHIP_THRUST 0.12f;
+#define OVERHEAT_MAX 300.0f;
+
+typedef struct {
+    float x, y, vx, vy, angle;
+    float fuel, heat;
+    int score, combo;
+    int lives;
+    bool tractor_active;
+    float tractor_charge;
+    bool combo_boost_active;
+    int combo_boost_timer;
+    float overheat_damage_accumulator;
+} Ship;
+
+Ship ship;
+
+int frame = 0;
+
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 
+void thick_line(int x1, int y1, int x2, int y2, int thickness) {
+    if (thickness <= 1) {
+        SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+        return;
+    }
+    int dx = x2 - x1, dy = y2 - y1;
+    float len = hypotf(dx, dy);
+    if (len < 1.0f) return;
+    float nx = -dy / len, ny = dx / len;
+    for (int t = -thickness/2; t <= thickness/2; t++) {
+        int ox = (int)(nx * t), oy = (int)(ny * t);
+        SDL_RenderDrawLine(renderer, x1 + ox, y1 + oy, x2 + ox, y2 + oy);
+    }
+}
+
+
 void init_game() {
     srand(time(NULL));
-};
+    ship = (Ship) {
+        WINDOW_W / 2.0f, WINDOW_H / 2.0f, 0, 0, -M_PI / 2,
+        1000.0f, 0, 0, 0, 3, false, 0, false, 0,
+        0.0f
+    };
+}
+
+void update() {
+
+}
+
+draw_ship() {
+    float heat_ratio = ship.heat / (float)OVERHEAT_MAX;
+    float heat_glow = fminf(heat_ratio, 1.3f);
+
+    Uint8 r = 255;
+    Uint8 g = (Uint8)(255 - heat_glow * 160);
+    Uint8 b = (Uint8)(120 + heat_glow * 40);
+    Uint8 alpha = 220 + (Uint8)(35 * sinf(frame * 0.25f));
+
+    SDL_SetRenderDrawColor(renderer, r, g, b, alpha);
+
+    float nx = ship.x + cosf(ship.angle) * 30;
+    float ny = ship.y + sinf(ship.angle) * 30;
+    float lx = ship.x + cosf(ship.angle + 2.4f) * 24;
+    float ly = ship.y + sinf(ship.angle + 2.4f) * 24;
+    float rx = ship.x + cosf(ship.angle - 2.4f) * 24;
+    float ry = ship.y + sinf(ship.angle - 2.4f) * 24;
+    float corex = ship.x + cosf(ship.angle) * 14;
+    float corey = ship.y + sinf(ship.angle) * 14;
+
+    thick_line((int)nx, (int)ny, (int)lx, (int)ly, 7);
+    thick_line((int)lx, (int)ly, (int)corex, (int)corey, 7);
+    thick_line((int)corex, (int)corey, (int)rx, (int)ry, 7);
+    thick_line((int)rx, (int)ry, (int)nx, (int)ny, 7);
+}
+
+render() {
+    SDL_SetRenderDrawColor(renderer, 3, 3, 12, 255);
+    SDL_RenderClear(renderer);
+    draw_ship();
+    SDL_RenderPresent(renderer);
+}
 
 int main(int argc, char* argv[]) {
     SDL_Init(SDL_INIT_VIDEO);
@@ -30,6 +108,8 @@ int main(int argc, char* argv[]) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) running = false;
         }
+
+        render();
 
         SDL_Delay(16);
     }
