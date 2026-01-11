@@ -85,6 +85,12 @@ draw_ship() {
     thick_line((int)lx, (int)ly, (int)corex, (int)corey, 7);
     thick_line((int)corex, (int)corey, (int)rx, (int)ry, 7);
     thick_line((int)rx, (int)ry, (int)nx, (int)ny, 7);
+
+    SDL_SetRenderDrawColor(renderer, 255, 240 - (int)(heat_glow * 120), 180, 200);
+    for (int r = 0; r < 12; r++) {
+        SDL_RenderDrawLine(renderer, (int)(ship.x - r), (int)ship.y, (int)(ship.x + r), (int)ship.y);
+        SDL_RenderDrawLine(renderer, (int)ship.x, (int)(ship.y - r), (int)ship.x, (int)(ship.y + r));
+    }
 }
 
 render() {
