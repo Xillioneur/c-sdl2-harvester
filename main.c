@@ -13,6 +13,7 @@
 
 #define SHIP_ROT_SPEED 0.10f
 #define SHIP_THRUST 0.12f
+#define HARVEST_RANGE 65.0f
 #define OVERHEAT_MAX 300.0f
 
 #define HEAT_GAIN_PER_THRUST 1.1f
@@ -177,6 +178,37 @@ void update() {
     }
 
     wrap(&ship.x, &ship.y);
+
+    ship.fuel = fminf(1000.0f, ship.fuel + 0.35f);
+
+    // Cloud harvesting and wave logic
+    for (int i = 0; i < cloud_cnt; i++) {
+        if (!clouds[i].active) continue;
+        GasCloud* c = &clouds[i];
+        
+        // TODO: Tractor system
+
+        c->x += c->vx;
+        c->y += c->vy;
+        c->phase += 0.08f;
+        c->vx *= 0.97f;
+        c->vy *= 0.97f;
+        wrap(&c->x, &c->y);
+
+        if (distance(c->x, c->y, ship.x, ship.y) < HARVEST_RANGE) {
+            int points = c->value * (1 + ship.combo * 0.2f);
+            ship.score += points;
+            // TODO: Harvset effect
+            c->active = 0;
+            clouds[i] = clouds[--cloud_cnt];
+            i--;
+            // TODO: Combo
+
+            // TODO: Clouds collected this wave
+            continue;
+        }   
+
+    }
 }
 
 void draw_ship() {
