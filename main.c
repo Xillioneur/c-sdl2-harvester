@@ -9,6 +9,8 @@
 #define WINDOW_W 1200
 #define WINDOW_H 675
 
+#define MAX_CLOUDS 120
+
 #define SHIP_ROT_SPEED 0.10f
 #define SHIP_THRUST 0.12f
 #define OVERHEAT_MAX 300.0f
@@ -20,7 +22,6 @@
 #define OVERHEAT_CRITICAL_THRESHOLD 1.00f
 #define OVERHEAT_THRUST_PENALTY 0.30f
 #define OVERHEAT_DRAG_MULTIPLIER 0.94f
-
 
 typedef struct {
     float x, y, vx, vy, angle;
@@ -34,12 +35,31 @@ typedef struct {
     float overheat_damage_accumulator;
 } Ship;
 
-Ship ship;
+typedef struct {
+    float x, y, vx, vy;
+    float size, density, phase;
+    float pull_strength;
+    int value;
+    int active;
+    Uint32 color;
+} GasCloud;
 
+Ship ship;
+GasCloud clouds[MAX_CLOUDS];
+
+int cloud_cnt = 0;
 int frame = 0;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
+
+float distance(float x1, float y1, float x2, float y2) {
+    float dx = x1 - x2;
+    float dy = y1 - y2;
+    if (fabsf(dx) > WINDOW_W / 2) dx -= (dx > 0 ? WINDOW_W : -WINDOW_W);
+    if (fabsf(dy) > WINDOW_H / 2) dy -= (dy > 0 ? WINDOW_H : -WINDOW_H);
+    return hypotf(dx, dy);
+}
 
 void thick_line(int x1, int y1, int x2, int y2, int thickness) {
     if (thickness <= 1) {
@@ -64,6 +84,43 @@ bool is_overheat_warning() {
     return ship.heat >= OVERHEAT_MAX * OVERHEAT_WARNING_THRESHOLD;
 }
 
+void spawn_cloud() {
+    if (cloud_cnt >= MAX_CLOUDS) return;
+    GasCloud* c = &clouds[cloud_cnt++];
+    c->active = 1;
+    c->size = 18 + (rand() % 32);
+    c->density = 0.65f + (rand() % 35) / 100.0f;
+    c->phase = rand() * 2 * M_PI / RAND_MAX;
+    c->pull_strength = 0.14f + (rand() % 70) / 1000.0f;
+    c->value = 6 + (rand() % 10);
+
+    int tries = 0;
+    do {
+        c->x = rand() % WINDOW_W;
+        c->y = rand() % WINDOW_H;
+    } while (distance(c->x, c->y, ship.x, ship.y) < 180 && ++tries < 50);
+
+    float dir = rand() * 2 * M_PI / RAND_MAX;
+    float speed = 0.4f + (rand() % 50) / 100.0f;
+    c->vx = cosf(dir) * speed;
+    c->vy = sinf(dir) * speed;
+
+    int hue = 140 + rand() % 100;
+    float sat = 0.9f + (rand() % 10)/100.0f;
+    float val = 1.0f;
+    float cmax = val * sat;
+    float hp = hue / 60.0f;
+    float x = cmax * (1 - fabsf(fmodf(hp, 2) - 1));
+    Uint8 r,g,b;
+    if (hp < 1) { r = cmax*255; g = x*255; b = 0; }
+    else if (hp < 2) { r = x*255; g = cmax*255; b = 0; }
+    else if (hp < 3) { r = 0; g = cmax*255; b = x*255; }
+    else if (hp < 4) { r = 0; g = x*255; b = cmax*255; }
+    else if (hp < 5) { r = x*255; g = 0; b = cmax*255; }
+    else { r = cmax*255; g = 0; b = x*255; }
+    c->color = (r << 16) | (g << 8) | b | 0xFF;
+}
+
 void init_game() {
     srand(time(NULL));
     ship = (Ship) {
@@ -71,6 +128,10 @@ void init_game() {
         1000.0f, 0, 0, 0, 3, false, 0, false, 0,
         0.0f
     };
+    cloud_cnt = 0;
+    frame = 0;
+
+    for (int i = 0; i < 35; i++) spawn_cloud();
 }
 
 void update() {
@@ -103,18 +164,15 @@ void update() {
         ship.vx *= OVERHEAT_DRAG_MULTIPLIER;
         ship.vy *= OVERHEAT_DRAG_MULTIPLIER;
         // TODO: critical overheat effect
-
         // TODO: Damage over time
     } else {
         ship.vx *= 0.985f;
-        ship.vy *- 0.985f;
+        ship.vy *= 0.985f;
         ship.overheat_damage_accumulator = fmaxf(0, ship.overheat_damage_accumulator - 0.4f);
     }
-
-
 }
 
-draw_ship() {
+void draw_ship() {
     float heat_ratio = ship.heat / (float)OVERHEAT_MAX;
     float heat_glow = fminf(heat_ratio, 1.3f);
 
@@ -168,9 +226,36 @@ draw_ship() {
     }
 }
 
-render() {
+void draw_gas_cloud(GasCloud* c) {
+    float pulse = 0.8f + 0.2f * sinf(c->phase + frame * 0.14f);
+    int rad = (int)(c->size * pulse * c->density);
+    
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 50);
+    for (int dy = -rad*1.3f; dy <= rad*1.3f; dy += 7) {
+        int w = (int)(sqrtf(rad*rad*1.7f - dy*dy) * 0.35f);
+        if (w > 0)
+            SDL_RenderDrawLine(renderer, (int)(c->x - w), (int)(c->y + dy), (int)(c->x + w), (int)(c->y + dy));
+    }
+    
+    SDL_SetRenderDrawColor(renderer, (c->color>>16)&255, (c->color>>8)&255, c->color&255, 255);
+    for (int dy = -rad; dy <= rad; dy += 3) {
+        int w = (int)(sqrtf(rad*rad - dy*dy) * c->density * 0.9f);
+        SDL_RenderDrawLine(renderer, (int)(c->x - w), (int)(c->y + dy), (int)(c->x + w), (int)(c->y + dy));
+    }
+    
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 220);
+    for (int r = 0; r < 8; r++) {
+        SDL_RenderDrawLine(renderer, (int)(c->x - r), (int)c->y, (int)(c->x + r), (int)c->y);
+        SDL_RenderDrawLine(renderer, (int)c->x, (int)(c->y - r), (int)c->x, (int)(c->y + r));
+    }
+}
+
+void render() {
     SDL_SetRenderDrawColor(renderer, 3, 3, 12, 255);
     SDL_RenderClear(renderer);
+
+    for (int i = 0; i < cloud_cnt; i++) if (clouds[i].active) draw_gas_cloud(&clouds[i]);
+
     draw_ship();
     SDL_RenderPresent(renderer);
 }
