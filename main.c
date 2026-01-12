@@ -53,6 +53,11 @@ int frame = 0;
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 
+void wrap(float* x, float* y) {
+    *x = fmodf(*x + WINDOW_W * 10, WINDOW_W);
+    *y = fmodf(*y + WINDOW_H * 10, WINDOW_H);
+}
+
 float distance(float x1, float y1, float x2, float y2) {
     float dx = x1 - x2;
     float dy = y1 - y2;
@@ -170,6 +175,8 @@ void update() {
         ship.vy *= 0.985f;
         ship.overheat_damage_accumulator = fmaxf(0, ship.overheat_damage_accumulator - 0.4f);
     }
+
+    wrap(&ship.x, &ship.y);
 }
 
 void draw_ship() {
