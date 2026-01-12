@@ -16,6 +16,7 @@
 #define HEAT_GAIN_PER_THRUST 1.1f
 #define HEAT_DECAY_NORMAL 0.7f
 #define HEAT_DECAY_CRITICAL 0.35f
+#define OVERHEAT_WARNING_THRESHOLD 0.80f
 #define OVERHEAT_CRITICAL_THRESHOLD 1.00f
 #define OVERHEAT_THRUST_PENALTY 0.30f
 #define OVERHEAT_DRAG_MULTIPLIER 0.94f
@@ -57,6 +58,10 @@ void thick_line(int x1, int y1, int x2, int y2, int thickness) {
 
 bool is_critical_overheat() {
     return ship.heat >= OVERHEAT_MAX * OVERHEAT_CRITICAL_THRESHOLD;
+}
+
+bool is_overheat_warning() {
+    return ship.heat >= OVERHEAT_MAX * OVERHEAT_WARNING_THRESHOLD;
 }
 
 void init_game() {
@@ -126,7 +131,10 @@ draw_ship() {
             r = 230; g = 90; b = 50;
             alpha = 200;
         }
-    } 
+    } else if (is_overheat_warning()) {
+        g = (Uint8)(g * 0.5f + 100);
+        b = (Uint8)(b * 0.3f + 30);
+    }
 
     SDL_SetRenderDrawColor(renderer, r, g, b, alpha);
 
@@ -148,6 +156,15 @@ draw_ship() {
     for (int r = 0; r < 12; r++) {
         SDL_RenderDrawLine(renderer, (int)(ship.x - r), (int)ship.y, (int)(ship.x + r), (int)ship.y);
         SDL_RenderDrawLine(renderer, (int)ship.x, (int)(ship.y - r), (int)ship.x, (int)(ship.y + r));
+    }
+
+    if (is_overheat_warning()) {
+        Uint8 glow_a = (Uint8)(80 + 120 * sinf(frame * 0.45f));
+        SDL_SetRenderDrawColor(renderer, 255, 140, 40, glow_a);
+        for (int r = 0; r < 22; r += 4) {
+            SDL_RenderDrawLine(renderer, (int)(ship.x - r*1.6f), (int)ship.y,
+                                    (int)(ship.x + r*1.6f), (int)ship.y);
+        }
     }
 }
 
