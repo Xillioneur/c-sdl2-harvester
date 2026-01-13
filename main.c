@@ -10,6 +10,7 @@
 #define WINDOW_H 675
 
 #define MAX_CLOUDS 120
+#define MAX_CREATURES 38
 
 #define SHIP_ROT_SPEED 0.10f
 #define SHIP_THRUST 0.12f
@@ -49,10 +50,21 @@ typedef struct {
     Uint32 color;
 } GasCloud;
 
+typedef struct {
+    float x, y, vx, vy, angle, wiggle;
+    float size, hunt_phase, patrol_phase;
+    float target_x, target_y;
+    int type;
+    int active;
+    Uint32 color;
+} NebulaCreature;
+
 Ship ship;
 GasCloud clouds[MAX_CLOUDS];
+NebulaCreature creatures[MAX_CREATURES];
 
 int cloud_cnt = 0;
+int creature_cnt = 0;
 int frame = 0;
 int combo_timer;
 
@@ -132,6 +144,44 @@ void spawn_cloud() {
     c->color = (r << 16) | (g << 8) | b | 0xFF;
 }
 
+void spawn_creature() {
+    if (creature_cnt >= MAX_CREATURES) return;
+    NebulaCreature* n = &creatures[creature_cnt++];
+    n->active = 1;
+    n->size = 16 + rand() % 26;
+    n->hunt_phase = 0;
+    n->wiggle = rand() * 2 * M_PI / RAND_MAX;
+    n->patrol_phase = rand() * 2 * M_PI / RAND_MAX;
+
+    n->type = rand() % 3;
+
+    int tries = 0;
+    do {
+        float side = rand() % 4;
+        if (side == 0) { n->x = -100; n->y = rand() % WINDOW_H; }
+        else if (side == 1) { n->x = WINDOW_W + 100; n->y = rand() % WINDOW_H; }
+        else if (side == 2) { n->y = -100; n->x = rand() % WINDOW_W; }
+        else { n->y = WINDOW_H + 100; n->x = rand() % WINDOW_W; }
+    } while (tries++ < 80 && distance(n->x, n->y, ship.x, ship.y) < 300);
+
+    float dir_to_ship = atan2f(ship.y - n->y, ship.x - n->x);
+    float offset = (rand() % 100 - 50) / 100.0f * M_PI / 2;
+    float target_dir = dir_to_ship + offset;
+    float target_dist = 300 + rand() % 400;
+    n->target_x = n->x + cosf(target_dir) * target_dist;
+    n->target_y = n->y + sinf(target_dir) * target_dist;
+
+    float dir = rand() * 2 * M_PI / RAND_MAX;
+    float base_speed = (n->type == 0) ? 0.8f : (n->type == 1) ? 1.4f : 1.0f;
+    n->vx = cosf(dir) * base_speed;
+    n->vy = sinf(dir) * base_speed;
+    n->angle = dir;
+
+    if (n->type == 0) n->color = 0x88BBFFFF | ((170 + rand() % 50) << 24);
+    else if (n->type == 1) n->color = 0xFF8888FF | ((140 + rand() % 60) << 24);
+    else n->color = 0xCC88FFFF | ((130 + rand() % 70) << 24);
+}
+
 void init_game() {
     srand(time(NULL));
     ship = (Ship) {
@@ -139,10 +189,12 @@ void init_game() {
         1000.0f, 0, 0, 0, 3, false, 0, false, 0,
         0.0f
     };
-    cloud_cnt = 0;
+    cloud_cnt = creature_cnt = 0;
     frame = 0;
 
     for (int i = 0; i < 35; i++) spawn_cloud();
+
+    for (int i = 0; i < 8; i++) spawn_creature();
 }
 
 void update() {
@@ -251,6 +303,12 @@ void update() {
         }   
     }
 
+    for (int i = 0; i < creature_cnt; i++) {
+        if (!creatures[i].active) continue;
+        NebulaCreature* n = &creatures[i];
+        wrap(&n->x, &n->y);
+    }
+
     if (combo_timer > 0) combo_timer--;
     else ship.combo = 0;
 }
@@ -353,11 +411,49 @@ void draw_gas_cloud(GasCloud* c) {
     }
 }
 
+void draw_nebula_creature(NebulaCreature *n) {
+    float pulse = 0.85f + 0.15f * sinf(frame * 0.18f + n->hunt_phase);
+    int size = (int)(n->size * pulse);
+
+    SDL_SetRenderDrawColor(renderer, (n->color>>16)&255, (n->color>>8)&255, n->color&255, (n->color>>24)&255);
+    for (int dy = -size; dy <= size; dy += 3) {
+        int w = (int)sqrtf(size*size - dy*dy);
+        SDL_RenderDrawLine(renderer, (int)(n->x - w), (int)(n->y + dy), (int)(n->x + w), (int)(n->y + dy));
+    }
+
+    if (n->type == 0) {
+        SDL_SetRenderDrawColor(renderer, 200, 220, 255, 180);
+        for (int i = 0; i < 5; i++) {
+            float ang = n->angle + i * M_PI / 2.5f + sinf(n->wiggle + i) * 0.3f;
+            int ex = (int)(n->x + cosf(ang) * (size + 10));
+            int ey = (int)(n->y + sinf(ang) * (size + 10));
+            thick_line((int)n->x, (int)n->y, ex, ey, 2);
+        }
+    } else if (n->type == 1) {
+        SDL_SetRenderDrawColor(renderer, 255, 120, 120, 220);
+        for (int i = 0; i < 6; i++) {
+            float ang = n->angle + i * M_PI / 3 + sinf(n->wiggle + i) * 0.4f;
+            int ex = (int)(n->x + cosf(ang) * (size + 16));
+            int ey = (int)(n->y + sinf(ang) * (size + 16));
+            thick_line((int)n->x, (int)n->y, ex, ey, 4);
+        }
+    } else {
+        SDL_SetRenderDrawColor(renderer, 180, 100, 220, 200);
+        for (int i = 0; i < 8; i++) {
+            float ang = n->angle + i * M_PI / 4 + sinf(n->wiggle * 0.8f + i) * 0.6f;
+            int ex = (int)(n->x + cosf(ang) * (size + 18));
+            int ey = (int)(n->y + sinf(ang) * (size + 18));
+            thick_line((int)n->x, (int)n->y, ex, ey, 3);
+        }
+    }
+}
+
 void render() {
     SDL_SetRenderDrawColor(renderer, 3, 3, 12, 255);
     SDL_RenderClear(renderer);
 
     for (int i = 0; i < cloud_cnt; i++) if (clouds[i].active) draw_gas_cloud(&clouds[i]);
+    for (int i = 0; i < creature_cnt; i++) if (creatures[i].active) draw_nebula_creature(&creatures[i]);
 
     draw_ship();
     SDL_RenderPresent(renderer);
