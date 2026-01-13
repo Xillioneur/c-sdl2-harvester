@@ -25,6 +25,8 @@
 #define OVERHEAT_DRAG_MULTIPLIER 0.94f
 
 #define TRACTOR_RANGE 220.0f
+#define COMBO_BOOST_THRESHOLD 8
+#define COMBO_BOOST_DURATION 600
 
 typedef struct {
     float x, y, vx, vy, angle;
@@ -52,6 +54,7 @@ GasCloud clouds[MAX_CLOUDS];
 
 int cloud_cnt = 0;
 int frame = 0;
+int combo_timer;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -162,6 +165,17 @@ void update() {
     }
     prev_tractor = tractor;
 
+    if (ship.combo >= COMBO_BOOST_THRESHOLD && !ship.combo_boost_active) {
+        ship.combo_boost_active = true;
+        ship.combo_boost_timer = COMBO_BOOST_DURATION;
+    }
+    if (ship.combo_boost_active) {
+        ship.combo_boost_timer--;
+        if (ship.combo_boost_timer <= 0) {
+            ship.combo_boost_active = false;
+        }
+    }
+
     if (left) ship.angle -= SHIP_ROT_SPEED;
     if (right) ship.angle += SHIP_ROT_SPEED;
 
@@ -229,12 +243,16 @@ void update() {
             c->active = 0;
             clouds[i] = clouds[--cloud_cnt];
             i--;
-            // TODO: Combo
+            ship.combo++;
+            combo_timer = 300;
 
             // TODO: Clouds collected this wave
             continue;
         }   
     }
+
+    if (combo_timer > 0) combo_timer--;
+    else ship.combo = 0;
 }
 
 void draw_ship() {
@@ -287,7 +305,17 @@ void draw_ship() {
         SDL_SetRenderDrawColor(renderer, 120, 240, 255, beam_a);
         for (int r = 0; r < 16; r += 3) {
             SDL_RenderDrawLine(renderer, (int)(ship.x - r*1.4f), (int)ship.y,
-                                (int)(ship.x + r*1.4f), (int)ship.y);
+                                      (int)(ship.x + r*1.4f), (int)ship.y);
+        }
+    }
+
+    if (ship.combo > 0) {
+        float pulse = sinf(frame * 0.25f) * 0.5f + 0.5f;
+        Uint8 aura_a = (Uint8)(140 + 115 * pulse);
+        SDL_SetRenderDrawColor(renderer, 140, 255, 220, aura_a);
+        for (int r = 0; r < 14; r += 2) {
+            SDL_RenderDrawLine(renderer, (int)(ship.x - r), (int)(ship.y - r),
+                                      (int)(ship.x + r), (int)(ship.y + r));
         }
     }
 
