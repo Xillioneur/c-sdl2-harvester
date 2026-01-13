@@ -200,14 +200,15 @@ void update() {
         if (!clouds[i].active) continue;
         GasCloud* c = &clouds[i];
         
-        // TODO: Code Combo behavior
+        float current_range = ship.combo_boost_active ? TRACTOR_RANGE * 1.6f : TRACTOR_RANGE;
+        float current_pull = ship.combo_boost_active ? 1.5f : 1.0f;
 
-        if (ship.tractor_active && distance(c->x, c->y, ship.x, ship.y) < TRACTOR_RANGE) {
+        if (ship.tractor_active && distance(c->x, c->y, ship.x, ship.y) < current_range) {
             float dx = ship.x - c->x;
             float dy = ship.y - c->y;
             float dist = hypotf(dx, dy);
             if (dist > 0) {
-                float pull = c->pull_strength * fminf(ship.tractor_charge * 0.02f, 1.0f); // TODO: COMBO
+                float pull = c->pull_strength * fminf(ship.tractor_charge * 0.02f, current_pull);
                 c->vx += (dx / dist) * pull;
                 c->vy += (dy / dist) * pull;
                 // TODO: Tractor beam effect
