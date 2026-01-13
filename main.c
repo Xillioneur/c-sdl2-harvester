@@ -24,6 +24,8 @@
 #define OVERHEAT_THRUST_PENALTY 0.30f
 #define OVERHEAT_DRAG_MULTIPLIER 0.94f
 
+#define TRACTOR_RANGE 220.0f
+
 typedef struct {
     float x, y, vx, vy, angle;
     float fuel, heat;
@@ -145,8 +147,20 @@ void update() {
     int left = keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT];
     int right = keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT];
     int thrust = keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP];
+    static bool prev_tractor = false;
+    bool tractor = keys[SDL_SCANCODE_SPACE];
 
     frame++;
+
+    if (tractor && !prev_tractor) ship.tractor_active = true;
+    if (tractor) {
+        ship.tractor_charge += 0.25f;
+        if (!ship.combo_boost_active) ship.fuel -= 0.12f;
+    } else {
+        ship.tractor_active = false;
+        ship.tractor_charge = fmaxf(0, ship.tractor_charge - 0.4f);
+    }
+    prev_tractor = tractor;
 
     if (left) ship.angle -= SHIP_ROT_SPEED;
     if (right) ship.angle += SHIP_ROT_SPEED;
@@ -186,7 +200,19 @@ void update() {
         if (!clouds[i].active) continue;
         GasCloud* c = &clouds[i];
         
-        // TODO: Tractor system
+        // TODO: Code Combo behavior
+
+        if (ship.tractor_active && distance(c->x, c->y, ship.x, ship.y) < TRACTOR_RANGE) {
+            float dx = ship.x - c->x;
+            float dy = ship.y - c->y;
+            float dist = hypotf(dx, dy);
+            if (dist > 0) {
+                float pull = c->pull_strength * fminf(ship.tractor_charge * 0.02f, 1.0f); // TODO: COMBO
+                c->vx += (dx / dist) * pull;
+                c->vy += (dy / dist) * pull;
+                // TODO: Tractor beam effect
+            }
+        }
 
         c->x += c->vx;
         c->y += c->vy;
@@ -207,7 +233,6 @@ void update() {
             // TODO: Clouds collected this wave
             continue;
         }   
-
     }
 }
 
