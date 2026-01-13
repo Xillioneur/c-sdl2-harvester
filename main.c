@@ -281,6 +281,16 @@ void draw_ship() {
         SDL_RenderDrawLine(renderer, (int)ship.x, (int)(ship.y - r), (int)ship.x, (int)(ship.y + r));
     }
 
+    if (ship.tractor_active) {
+        float pulse = sinf(frame * 0.3f) * 0.4f + 0.6f;
+        Uint8 beam_a = (Uint8)(180 + 75 * pulse);
+        SDL_SetRenderDrawColor(renderer, 120, 240, 255, beam_a);
+        for (int r = 0; r < 16; r += 3) {
+            SDL_RenderDrawLine(renderer, (int)(ship.x - r*1.4f), (int)ship.y,
+                                (int)(ship.x + r*1.4f), (int)ship.y);
+        }
+    }
+
     if (is_overheat_warning()) {
         Uint8 glow_a = (Uint8)(80 + 120 * sinf(frame * 0.45f));
         SDL_SetRenderDrawColor(renderer, 255, 140, 40, glow_a);
