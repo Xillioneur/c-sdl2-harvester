@@ -15,6 +15,8 @@
 #define SHIP_ROT_SPEED 0.10f
 #define SHIP_THRUST 0.12f
 #define HARVEST_RANGE 65.0f
+#define FUEL_CONSUMPTION 0.85f
+#define TRACTOR_FUEL_COST  0.60f
 #define OVERHEAT_MAX 300.0f
 
 #define HEAT_GAIN_PER_THRUST 1.1f
@@ -62,6 +64,12 @@ typedef struct {
     Uint32 color;
 } NebulaCreature;
 
+typedef struct {
+    float base_x, base_y;
+    float radius;
+    float pulse_phase;
+} Sun;
+
 Ship ship;
 GasCloud clouds[MAX_CLOUDS];
 NebulaCreature creatures[MAX_CREATURES];
@@ -76,6 +84,7 @@ int wave = 1;
 int clouds_collected_this_wave = 0;
 int clouds_needed_for_next_wave = CLOUDS_PER_WAVE_BASE;
 int wave_flash_timer = 0;
+int current_wave_display_timer = 0;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -106,6 +115,35 @@ void thick_line(int x1, int y1, int x2, int y2, int thickness) {
         int ox = (int)(nx * t), oy = (int)(ny * t);
         SDL_RenderDrawLine(renderer, x1 + ox, y1 + oy, x2 + ox, y2 + oy);
     }
+}
+
+const bool digit_segments[10][7] = {
+    {1,1,1,0,1,1,1}, // 0
+    {0,0,1,0,0,1,0}, // 1
+    {1,0,1,1,1,0,1}, // 2
+    {1,0,1,1,0,1,1}, // 3
+    {0,1,1,1,0,1,0}, // 4
+    {1,1,0,1,0,1,1}, // 5
+    {1,1,0,1,1,1,1}, // 6
+    {1,0,1,0,0,1,0}, // 7
+    {1,1,1,1,1,1,1}, // 8
+    {1,1,1,1,0,1,1}  // 9
+};
+
+void draw_7segment_digit(int bx, int by, int digit) {
+    if (digit < 0 || digit > 9) return;
+
+    int w = 20;
+    int h = 32;
+    int thick = 4;
+
+    if (digit_segments[digit][0]) thick_line(bx, by, bx + w, by, thick);
+    if (digit_segments[digit][1]) thick_line(bx, by, bx, by + h/2, thick);
+    if (digit_segments[digit][2]) thick_line(bx + w, by, bx + w, by + h/2, thick);
+    if (digit_segments[digit][3]) thick_line(bx, by + h/2, bx + w, by + h/2, thick);
+    if (digit_segments[digit][4]) thick_line(bx, by + h/2, bx, by + h, thick);
+    if (digit_segments[digit][5]) thick_line(bx + w, by + h/2, bx + w, by + h, thick);
+    if (digit_segments[digit][6]) thick_line(bx, by + h, bx + w, by + h, thick);
 }
 
 bool is_critical_overheat() {
@@ -224,7 +262,7 @@ void update() {
     if (tractor && !prev_tractor) ship.tractor_active = true;
     if (tractor) {
         ship.tractor_charge += 0.25f;
-        if (!ship.combo_boost_active) ship.fuel -= 0.12f;
+        if (!ship.combo_boost_active) ship.fuel -= TRACTOR_FUEL_COST;
     } else {
         ship.tractor_active = false;
         ship.tractor_charge = fmaxf(0, ship.tractor_charge - 0.4f);
@@ -251,6 +289,7 @@ void update() {
     if (thrust && ship.fuel > 5.0f) {
         ship.vx += cosf(ship.angle) * SHIP_THRUST;
         ship.vy += sinf(ship.angle) * SHIP_THRUST;
+        ship.fuel -= FUEL_CONSUMPTION;
         ship.heat += HEAT_GAIN_PER_THRUST;
     }
 
@@ -273,7 +312,9 @@ void update() {
 
     wrap(&ship.x, &ship.y);
 
-    ship.fuel = fminf(1000.0f, ship.fuel + 0.35f);
+    if (!thrust) {
+        ship.fuel = fminf(1000.0f, ship.fuel + 0.08f);
+    }
 
     // Cloud harvesting and wave logic
     for (int i = 0; i < cloud_cnt; i++) {
@@ -310,6 +351,7 @@ void update() {
             clouds[i] = clouds[--cloud_cnt];
             i--;
             ship.combo++;
+            ship.fuel = fminf(1000.0f, ship.fuel + 60.0f + c->value * 8.0f);
             combo_timer = 300;
             clouds_collected_this_wave++;
 
@@ -318,6 +360,7 @@ void update() {
                 clouds_collected_this_wave = 0;
                 clouds_needed_for_next_wave = CLOUDS_PER_WAVE_BASE + wave * 18;
                 wave_flash_timer = 180;
+                current_wave_display_timer = 180;
 
                 for (int j = 0; j < WAVE_CREATURE_BONUS + wave / 2; j++) {
                     spawn_creature();
@@ -568,6 +611,95 @@ void render() {
     for (int i = 0; i < creature_cnt; i++) if (creatures[i].active) draw_nebula_creature(&creatures[i]);
 
     draw_ship();
+
+    // Score
+    int display_score = ship.score % 1000000;
+    char score_buf[7];
+    sprintf(score_buf, "%06d", display_score);
+
+    int digit_w = 32;
+    int start_x = WINDOW_W - 60;
+    int start_y = 10;
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    for (int i = 0; i < 6; i++) {
+        int digit = score_buf[5 - i] - '0';
+        int bx = start_x - i * (digit_w + 10);
+        draw_7segment_digit(bx, start_y, digit);
+    }
+
+    // Lives
+    for (int i = 0; i < ship.lives; i++) {
+        int lx = 40 + i * 45;
+        SDL_SetRenderDrawColor(renderer,180, 255, 180, 255);
+        thick_line(lx, 20, lx + 30, 20, 5);
+        thick_line(lx + 8, 30, lx + 22, 30, 5);
+    }
+
+    // Fuel bar
+    int fuel_fill = (int)((ship.fuel / 1000.0f) * 220);
+    SDL_SetRenderDrawColor(renderer, 40, 60, 80, 220);
+    SDL_RenderFillRect(renderer, &(SDL_Rect){30, 70, 240, 18});
+    SDL_SetRenderDrawColor(renderer, 80, 200, 255, 255);
+    SDL_RenderFillRect(renderer, &(SDL_Rect){33, 73, fuel_fill, 12});
+    
+
+    // Heat bar
+    int heat_fill = (int)((ship.heat / OVERHEAT_MAX) * 220);
+    SDL_SetRenderDrawColor(renderer, 40, 60, 80, 220);
+    SDL_RenderFillRect(renderer, &(SDL_Rect){30, 70, 240, 18});
+    if (is_critical_overheat()) {
+        SDL_SetRenderDrawColor(renderer, 255, 60, 40, 255);
+    } else if (is_overheat_warning()) {
+        SDL_SetRenderDrawColor(renderer, 255, 140, 40, 255);
+    } else {
+        SDL_SetRenderDrawColor(renderer, 255, 100, 80, 255);
+    }
+    SDL_RenderFillRect(renderer, &(SDL_Rect){33, 98, heat_fill, 8});
+
+    // Combo meter
+    if (ship.combo > 0) {
+        int combo_w = ship.combo * 10;
+        int max_w = 200;
+        if (combo_w > max_w) combo_w = max_w;
+
+        float pulse = sinf(frame * 0.35f) * 0.5f + 0.5f;
+        Uint8 r = 255;
+        Uint8 g = 220 + (Uint8)(35 * pulse);
+        Uint8 b = 100 + (Uint8)(100 * pulse);
+        Uint8 a = (Uint8)(200 + 55 * pulse);
+        
+        SDL_SetRenderDrawColor(renderer, r, g, b, a);
+        SDL_RenderFillRect(renderer, &(SDL_Rect){WINDOW_W/2 - combo_w/2, 20, combo_w, 24});
+
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, (Uint8)(100 + 155 * pulse));
+        SDL_RenderDrawRect(renderer, &(SDL_Rect){WINDOW_W/2 - combo_w/2 - 3, 17, combo_w + 6, 30});
+
+        if (ship.combo_boost_active) {
+            SDL_SetRenderDrawColor(renderer, 255, 220, 50, 255);
+            for (int off = 0; off < 8; off += 2) {
+                SDL_RenderDrawRect(renderer, &(SDL_Rect){WINDOW_W/2 - combo_w/2 - 8 - off, 12 - off, combo_w + 16 + off*2, 40 + off*2});
+            }
+        }
+    }
+
+    // Wave indicator
+    // Always show current wave number (bottom-right, subtle digits only)
+    SDL_SetRenderDrawColor(renderer, 220, 220, 220, 255);  // Subtle gray-white
+    int tx = WINDOW_W - 100;  // Bottom-right anchor for digits only
+    int ty = WINDOW_H - 50;   // Bottom position
+    int wave_digit_x = tx;    // Position digits directly
+    draw_7segment_digit(wave_digit_x + 35, ty - 8, wave % 10);  // Right digit first for readability
+    if (wave >= 10) draw_7segment_digit(wave_digit_x, ty - 8, (wave / 10) % 10);
+
+    // Flash yellow when advancing
+    if (current_wave_display_timer > 0) {
+        current_wave_display_timer--;
+        Uint8 flash_alpha = (Uint8)(180 + 75 * sinf(frame * 0.5f));
+        SDL_SetRenderDrawColor(renderer, 255, 255, 100, flash_alpha);
+        draw_7segment_digit(wave_digit_x + 35, ty - 8, wave % 10);
+        if (wave >= 10) draw_7segment_digit(wave_digit_x, ty - 8, (wave / 10) % 10);
+    }
     SDL_RenderPresent(renderer);
 }
 
