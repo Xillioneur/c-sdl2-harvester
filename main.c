@@ -29,6 +29,9 @@
 #define COMBO_BOOST_THRESHOLD 8
 #define COMBO_BOOST_DURATION 600
 
+#define CLOUDS_PER_WAVE_BASE 45
+#define WAVE_CREATURE_BONUS 4
+
 typedef struct {
     float x, y, vx, vy, angle;
     float fuel, heat;
@@ -66,7 +69,13 @@ NebulaCreature creatures[MAX_CREATURES];
 int cloud_cnt = 0;
 int creature_cnt = 0;
 int frame = 0;
+float danger_level = 0.0f;
 int combo_timer;
+
+int wave = 1;
+int clouds_collected_this_wave = 0;
+int clouds_needed_for_next_wave = CLOUDS_PER_WAVE_BASE;
+int wave_flash_timer = 0;
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -191,6 +200,11 @@ void init_game() {
     };
     cloud_cnt = creature_cnt = 0;
     frame = 0;
+    danger_level = 0.0f;
+    wave = 1;
+    clouds_collected_this_wave = 0;
+    clouds_needed_for_next_wave = CLOUDS_PER_WAVE_BASE;
+    wave_flash_timer = 0;
 
     for (int i = 0; i < 35; i++) spawn_cloud();
 
@@ -297,11 +311,25 @@ void update() {
             i--;
             ship.combo++;
             combo_timer = 300;
+            clouds_collected_this_wave++;
 
-            // TODO: Clouds collected this wave
+            if (clouds_collected_this_wave >= clouds_needed_for_next_wave) {
+                wave++;
+                clouds_collected_this_wave = 0;
+                clouds_needed_for_next_wave = CLOUDS_PER_WAVE_BASE + wave * 18;
+                wave_flash_timer = 180;
+
+                for (int j = 0; j < WAVE_CREATURE_BONUS + wave / 2; j++) {
+                    spawn_creature();
+                }
+
+                danger_level += 0.2f;
+            }
             continue;
         }   
     }
+
+    while (cloud_cnt < 40 + (int)(danger_level * 35)) spawn_cloud();
 
     for (int i = 0; i < creature_cnt; i++) {
         if (!creatures[i].active) continue;
@@ -389,6 +417,8 @@ void update() {
 
     if (combo_timer > 0) combo_timer--;
     else ship.combo = 0;
+
+    if (wave_flash_timer > 0) wave_flash_timer--;
 }
 
 void draw_ship() {
