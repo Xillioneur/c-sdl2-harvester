@@ -415,6 +415,10 @@ void update() {
         }
     }
 
+    if (frame % 520 == 0 && creature_cnt < 14 + (int)(danger_level)) {
+        spawn_creature();
+    }
+
     if (combo_timer > 0) combo_timer--;
     else ship.combo = 0;
 
