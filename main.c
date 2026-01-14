@@ -371,6 +371,20 @@ void update() {
         n->vx *= 0.975;
         n->vy *= 0.975;
         wrap(&n->x, &n->y);
+
+        if (dist_to_ship < n->size + 28) {
+            ship.lives--;
+            ship.fuel *= 0.4f;
+            ship.heat = OVERHEAT_MAX * 0.92f;
+            // TODO: Add danger trail
+            n->active = 0;
+            creatures[i] = creatures[--creature_cnt];
+            ship.combo = 0;
+            if (ship.lives <= 0) {
+                printf("Game Over! Final Score: %d\n", ship.score);
+                init_game();
+            }
+        }
     }
 
     if (combo_timer > 0) combo_timer--;
