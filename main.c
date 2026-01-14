@@ -306,6 +306,70 @@ void update() {
     for (int i = 0; i < creature_cnt; i++) {
         if (!creatures[i].active) continue;
         NebulaCreature* n = &creatures[i];
+
+        n->hunt_phase += 0.04f;
+        n->wiggle += 0.09f;
+        n->patrol_phase += 0.025f;
+
+        float dist_to_ship = distance(n->x, n->y, ship.x, ship.y);
+
+        if (frame % 200 == i % 200) {
+            if (dist_to_ship > 600.0f) {
+                float dir_to_ship = atan2f(ship.y - n->y, ship.x - n->x);
+                float offset = (rand() % 100 - 50) / 100.0f * M_PI / 2;
+                float target_dir = dir_to_ship + offset;
+                float target_dist = 300 + rand() % 400;
+                n->target_x = n->x + cosf(target_dir) * target_dist;
+                n->target_y = n->y + sinf(target_dir) * target_dist;
+            } else {
+                float random_dir = rand() * 2 * M_PI / RAND_MAX;
+                float target_dist = 200 + rand() % 300;
+                n->target_x = n->x + cosf(random_dir) * target_dist;
+                n->target_y = n->y + sinf(random_dir) * target_dist;
+
+            }
+        }
+
+        float dir;
+        float dx = ship.x - n->x;
+        float dy = ship.y - n->y;
+        if (fabsf(dx) > WINDOW_W / 2) dx -= (dx > 0 ? WINDOW_W : -WINDOW_W);
+        if (fabsf(dy) > WINDOW_H / 2) dy -= (dy > 0 ? WINDOW_H : -WINDOW_H);
+        dir = atan2(dy, dx);
+
+        if (n->type == 0) {
+            if (dist_to_ship < 420) {
+                n->vx += cosf(dir) * 0.028f;
+                n->vy += sinf(dir) * 0.028f;
+            } else {
+                n->vx += cosf(dir) * 0.03f;
+                n->vy += sinf(dir) * 0.03f;
+            }
+        } else if (n->type == 1) {
+            if (dist_to_ship < 500) {
+                n->vx += cosf(dir) * 0.045f + sinf(n->wiggle) * 0.06f;
+                n->vy += sinf(dir) * 0.045f + cosf(n->wiggle) * 0.06f;
+            } else {
+                n->vx += cosf(dir) * 0.035f + sinf(n->wiggle) * 0.03f;
+                n->vy += sinf(dir) * 0.035f + cosf(n->wiggle) * 0.03f;
+            }
+        } else {
+            if (dist_to_ship < 380) {
+                float offset = (dist_to_ship < 180) ? -M_PI/2 : M_PI/2;
+                dir += offset + sinf(n->wiggle)*0.3f;
+                n->vx += cosf(dir) * 0.036f;
+                n->vy += sinf(dir) * 0.036f;
+            } else {
+                n->vx += cosf(dir) * 0.03f;
+                n->vy += sinf(dir) * 0.03f;
+            }
+        }
+
+        n->angle = atan2f(n->vy, n->vx);
+        n->x += n->vx;
+        n->y += n->vy;
+        n->vx *= 0.975;
+        n->vy *= 0.975;
         wrap(&n->x, &n->y);
     }
 
